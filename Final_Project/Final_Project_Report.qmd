@@ -1,0 +1,316 @@
+---
+title: "Financial Ratio and Stock Growth"
+author: "Tej Patel"
+format:
+  html:
+    theme: morph
+    code-fold: false
+    code-tools: false
+    echo: false
+    warning: false
+    error: false
+    message: false
+---
+
+# Research Question
+
+Research Question: Are companies with lower price-to-earnings (P/E) ratios more likely to have higher stock price growth?
+
+Importance and Curiosity: This research question is interesting because it sees if the valuation of a firm, as revealed by its price-to-earnings (P/E) ratio, will lead to predicting its future performance in the stock market. The P/E ratio is the ratio of a company's existing stock price to its earnings per share and is most often employed by investors to ascertain whether a stock is undervalued or overvalued. A lower P/E ratio tends to indicate a potential undervalued stock, a potential value buy, and a higher one may signal either overvaluation or over enthusiasm on the part of investors. This question is especially helpful since it addresses the value-growth dynamics as well as it touches upon the risk-reward side. Information regarding whether low P/E firms actually return more in the long term can allow investors to make more informed, better decisions. When there is a valuation-driven investment approach in a particular market, the discovery of a trend connecting the P/E ratio with the performance of the stocks can be a key advantage for both new and experienced investors. It also raises questions about the efficiency of the market: is the price already reflecting future growth, or are systematic opportunities being missed?
+
+Goal: Using the Price-to-Earnings Ratio from 2020 data from Kaggle, we can compare the five-year return value of stocks from 2020 up to 2025 to see if the lower P/E ratio did cause a higher return value of stocks over the past five years.
+
+# Data Sources and Background 
+
+S&P 500 Companies Kaggle Financial Information csv file: 
+
+The S&P 500 Companies with Financial Information dataset, available on Kaggle, holds the financial data of companies that make up the S&P 500 list of companies during 2020. The data includes significant data points such as market cap, debt to equity, and price earnings ratio, among others, through which the financial positions and performances of the firms can be evaluated. It is useful in examining financial attributes of leading U.S. companies belonging to various categories and obtaining information about their value in the markets, profitability levels, and level of risk they carry. This data would be very improant as it gives Price-to-Earnings data (P/E) from 2020 and this will help go along with the five-year return variabel which is from 2020-2025
+
+APA Citation: Fisher, P. (2021). S&P 500 Companies with Financial Information [Data set]. Kaggle. https://www.kaggle.com/datasets/paytonfisher/sp-500-companies-with-financial-information?resource=download
+
+Yahoo Finance: We need the latest stock information for S&P 500 companies, specifically from 2020 to 2025, to analyze their financial performance and stock growth with P/E ratio. To access this data, we are using the tidyquant and quantmod R packages, which provide a seamless interface to retrieve financial data from Yahoo Finance. These packages allow us to download crucial stock price data, such as adjusted closing prices, volume, and other market metrics, for a wide range of companies in the S&P 500 index. By utilizing these tools, we can efficiently gather and analyze the most current financial data to explore the relationship between debt-to-equity ratios and stock returns.
+
+APA Citation: Yahoo! Inc. (n.d.). Yahoo Finance. Retrieved April 25, 2025, from https://finance.yahoo.com/
+
+Unit of Analysis: individual company (specifically, S&P 500 companies).
+
+Time Frame: The time frame is from January 2023 to January 2024, focusing on the 1-year stock return.
+
+# Variables 
+
+## Independent Variable:
+
+Price-to-Earnings (P/E) Ratio: Price-to-Earnings (P/E) ratio is a measure of valuation used to compare a company's stock price to its earnings per share (EPS). To calculate the ratio, one divides the stock price by earnings per share. This is vital as it alerts investors to how much they are spending on a company's earnings. A higher P/E ratio typically means that investors expect high growth in the future, while a low P/E may mean that the stock is overpriced or the company's growth opportunities are slow. With the P/E ratio in our possession, we can explore how the market expectations and profitability of a company are related to stock returns.
+
+## Dependent Variable:
+
+One-Year Return: One-year stock return is a measure of percentage change in the stock price within 12 months. That is, it is calculated as:
+
+One-Year Return = (Price at the end of 2023−Price at the start of 2023)/ Price at the start of 2023
+
+This is an important variable since it provides a clean quantitative estimate of a firm's share performance in the specified time period. By looking at share returns, we can measure the impact of financial metrics (like debt level and profitability) on the appreciation of value of a firm, which allows investors and analysts to visualize trends between firm health and the appreciation in share price. This variable will be calculated and retrieved from Yahoo finance
+
+# Description on Variables
+
+## Fianancial and Stock Stats Table
+
+```{r}
+library(tidyquant)
+library(quantmod)
+library(tidyverse)
+library(dplyr)
+library(gt)
+library(DT)
+
+financials <- read_csv("financials.csv")
+
+sp500_symbols <- financials$Symbol
+
+stock_prices <- tq_get(sp500_symbols, 
+                       from = "2020-01-01", 
+                       to = "2025-01-01", 
+                       get = "stock.prices")
+
+stock_returns <- stock_prices %>%
+  group_by(symbol) %>%
+  summarize(
+    start_price = first(adjusted),
+    end_price = last(adjusted),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    five_year_return = (end_price - start_price) / start_price
+  )
+
+sp500_full_data <- financials %>%
+  inner_join(stock_returns, by = c("Symbol" = "symbol")) %>%
+  select(Name, Symbol, Sector, `Price/Earnings`, five_year_return)
+
+sp500_clean <- sp500_full_data %>%
+  filter(!is.na(`Price/Earnings`), !is.na(five_year_return)) %>%
+  filter(`Price/Earnings` > 0)
+
+sp500_interactive <- sp500_clean %>%
+  arrange(desc(five_year_return)) %>%
+  mutate(
+    `P/E Ratio` = round(`Price/Earnings`, 2),
+    `5-Year Return` = scales::percent(five_year_return, accuracy = 0.01)
+  ) %>%
+  select(
+    `Company Name` = Name,
+    Ticker = Symbol,
+    Sector,
+    `P/E Ratio`,
+    `5-Year Return`
+  )
+
+datatable(
+  sp500_interactive,
+  options = list(
+    pageLength = 10,
+    scrollX = TRUE
+  ),
+  class = 'stripe hover'
+)
+
+```
+
+## Distribution Histgoram of Price-to Earnings Ratio
+
+```{r}
+library(ggplot2)
+
+lower_bound <- quantile(sp500_clean$`Price/Earnings`, 0.05, na.rm = TRUE)
+upper_bound <- quantile(sp500_clean$`Price/Earnings`, 0.95, na.rm = TRUE)
+
+sp500_trimmed <- sp500_clean %>%
+  filter(
+    `Price/Earnings` >= lower_bound,
+    `Price/Earnings` <= upper_bound
+  )
+
+ggplot(sp500_trimmed, aes(x = `Price/Earnings`)) +
+  geom_histogram(binwidth = 5, fill = "#0073e6", color = "white", alpha = 0.8) +
+  labs(
+    title = "Distribution of Price-to-Earnings Ratios (5th-95th Percentile)",
+    x = "Price-to-Earnings Ratio",
+    y = "Number of Companies"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+```
+## Distirbution Histogram of Five-Year Return
+
+```{r}
+library(scales) # for percent_format()
+
+lower_return <- quantile(sp500_clean$five_year_return, 0.05, na.rm = TRUE)
+upper_return <- quantile(sp500_clean$five_year_return, 0.95, na.rm = TRUE)
+
+sp500_return_trimmed <- sp500_clean %>%
+  filter(
+    five_year_return >= lower_return,
+    five_year_return <= upper_return
+  )
+
+ggplot(sp500_return_trimmed, aes(x = five_year_return)) +
+  geom_histogram(binwidth = 0.1, fill = "#00b359", color = "white", alpha = 0.8) +
+  scale_x_continuous(labels = percent_format(accuracy = 1)) +
+  labs(
+    title = "Distribution of 5-Year Returns (5th-95th Percentile)",
+    x = "5-Year Return (%)",
+    y = "Number of Companies"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+```
+These histograms of distributions are extremely useful in revealing P/E ratios and five-year returns' spread and density for S&P 500 firms and separating typical performance and outliers. By separating 5th–95th percentiles, plots reduce skew caused by outliers and highlight most typical trends of valuation and long-term returns. This allows analysts to better visualize the overall scene of company performance and estimate how individual firms compare to the general market.
+
+
+## Bar chart of Average Price-to-Earnings Ratio by Sector
+
+```{r}
+sector_pe <- sp500_clean %>%
+  group_by(Sector) %>%
+  summarize(
+    avg_pe = mean(`Price/Earnings`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(avg_pe)) # sort sectors from highest to lowest P/E
+
+ggplot(sector_pe, aes(x = reorder(Sector, avg_pe), y = avg_pe)) +
+  geom_col(fill = "#0073e6", alpha = 0.8) +
+  coord_flip() +  # makes it horizontal for better readability
+  labs(
+    title = "Average P/E Ratio by Sector (S&P 500)",
+    x = "Sector",
+    y = "Average P/E Ratio"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+```
+## Bar chart of Average Five-Year Return by Sector
+
+```{r}
+sector_return <- sp500_clean %>%
+  group_by(Sector) %>%
+  summarize(
+    avg_return = mean(five_year_return, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(avg_return)) # sort sectors from highest to lowest return
+
+ggplot(sector_return, aes(x = reorder(Sector, avg_return), y = avg_return)) +
+  geom_col(fill = "#00b159", alpha = 0.8) +
+  coord_flip() +  # makes it horizontal
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +  # format as %
+  labs(
+    title = "Average 5-Year Return by Sector (S&P 500)",
+    x = "Sector",
+    y = "Average 5-Year Return (%)"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold")
+  )
+```
+
+These bar graphs show average P/E ratio and five-year return of each of the sectors among S&P 500 companies, how performance and valuation differ by industry. They are handy to identify sectors with higher investor expectations (through P/E) or better previous returns. This comparison is helpful to identify patterns across industries and investment decisions by sectors.
+
+# Hypothesis and Results
+
+## Hypothesis 
+
+Null Hypothesis (H₀): There is no relationship between the Price-to-Earnings (P/E) ratio and 5-year stock return. (P/E ratio does not predict future stock growth.)
+
+Alternative Hypothesis (H₁): There is a negative relationship between the Price-to-Earnings (P/E) ratio and 5-year stock return. (Lower P/E ratios are associated with higher future stock growth.)
+
+In hypothesis testing, to reject the null hypothesis, the p-value must be less than your significance level (α). (α = 0.05)
+
+## Scatter Plot
+
+```{r}
+# Assuming sp500_clean is your dataframe
+
+# Find 5th and 95th percentiles
+lower_return <- quantile(sp500_clean$five_year_return, 0.05, na.rm = TRUE)
+upper_return <- quantile(sp500_clean$five_year_return, 0.95, na.rm = TRUE)
+upper_pe <- quantile(sp500_clean$`Price/Earnings`, 0.95, na.rm = TRUE)
+
+# Calculate correlation
+cor_test <- cor.test(sp500_clean$`Price/Earnings`, sp500_clean$five_year_return)
+cor_value <- round(cor_test$estimate, 3)
+p_value <- signif(cor_test$p.value, 3)
+
+# Load libraries
+library(ggthemes)
+library(ggplot2)
+
+# Set plot size for interactive display (e.g., RStudio, Jupyter)
+options(repr.plot.width = 12, repr.plot.height = 8)
+
+# Create plot
+ggplot(sp500_clean, aes(x = `Price/Earnings`, y = five_year_return)) +
+  geom_point(
+    aes(color = Sector), 
+    size = 3, alpha = 0.8
+  ) +
+  geom_smooth(
+    method = "lm", se = FALSE, color = "black", linetype = "solid", linewidth = 1.2
+  ) +
+  annotate("text", x = upper_pe * 0.95, y = upper_return * 0.95, 
+         label = paste0("Pearson r = ", cor_value, 
+                        "\nP-value = ", p_value),
+         hjust = 1, vjust = 1, size = 3, fontface = "italic") +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    limits = c(lower_return, upper_return)
+  ) +
+  scale_x_continuous(
+    limits = c(0, upper_pe)
+  ) +
+  scale_color_brewer(palette = "Set3") +
+  labs(
+    title = "P/E Ratio vs 5-Year Return (%)",
+    x = "Price-to-Earnings (P/E) Ratio",
+    y = "5-Year Return (%)"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 12),
+    axis.title = element_text(face = "bold"),
+    panel.background = element_rect(fill = "#f9f9f9", color = NA),
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 8),
+    legend.key.size = unit(0.5, "lines"),
+    legend.box = "horizontal",
+    legend.background = element_rect(fill = "white", color = "gray"),
+    plot.margin = margin(10, 10, 40, 10)
+  ) +
+  guides(
+    color = guide_legend(nrow = 3, byrow = TRUE)
+  )
+
+```
+## Results
+
+Since the scatter plot shows that pearson r value which is the correlation value between two variables to be 0.079 and th p value to be 0.108, the null hypothesis is not rejected. That means there is not a strong correlation between P/E ratio and 5-Year return due to a weak correlation value and the p-value being larger than 0.05. The Pearson r value being 0.108 actually shows that the weak correlation is positive instead of negative showing that it is more likely that higher price-to-earnings ratio indicate higher stock growth than a lower price-to-earnings ratio. However, since there is no strong pearson r value from the scatter plot, no conclusion can be made about the relationship between P/E and five-year return value from stocks.
+
+# Conclusion 
+
+This research disproves the idea that low Price-to-Earnings (P/E) ratio automatically leads to long-term stock appreciation. In opposition to common financial mythology often promoting "value investing"—the principle of buying stocks with low P/E multiples in hopes of future large returns—the record of S&P 500 stocks over a five-year period indicates no statistical relationship between P/E multiple and stock performance. The low positive correlation (r = 0.079) and the large p-value (0.108) suggest that low P/E ratios are bad predictors of subsequent higher returns, at least with this data set. This result has important implications for investors, financial planners, and market analysts. Rather than sole reliance on P/E multiples in investment decisions, it would be more prudent to employ a multi-factor approach that includes company fundamentals, industry trends, and macro indicators. Such results also emphasize the benefits of evidence-based investing. For continuous research and business decision-making purposes, this research demands an evidence-based and more integrated approach to valuing stocks. Ultimately, it reminds us that when it comes to investing, no single variable is a guarantee for success and diversification are still essential.
+
+
+
+
